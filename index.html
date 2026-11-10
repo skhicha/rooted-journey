@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rooted Journey — Man Matters</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<style>
+  :root{
+    --bg:#0a0a0a; --bg-card:#171717; --bg-card-2:#0a0a0a; --border:#262626; --border-soft:#404040;
+    --text:#f5f5f4; --text-dim:#a3a3a3; --text-faint:#737373; --amber:#f59e0b; --amber-soft:rgba(245,158,11,0.1);
+    --amber-border:rgba(245,158,11,0.3); --shadow:0 20px 60px rgba(0,0,0,0.5);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html,body{ height:100%; margin:0; background:var(--bg); }
+  body{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    padding-top: env(safe-area-inset-top,0px);
+    padding-bottom: env(safe-area-inset-bottom,0px);
+  }
+  .app-shell{ max-width: 460px; margin: 0 auto; min-height: 100vh; background: var(--bg); position: relative;
+    border-left: 1px solid var(--border); border-right: 1px solid var(--border); overflow: hidden; }
+  .fade-in{ animation: fadeIn .35s ease both; }
+  @keyframes fadeIn{ from{opacity:0; transform: translateY(8px);} to{opacity:1; transform:none;} }
+  .pulse-dot{ animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+  .task-row{ transition: all .2s ease; }
+  .task-row:active{ transform: scale(0.98); }
+  .tab-btn{ transition: color .2s ease; }
+  .scrollhide::-webkit-scrollbar{ display:none; }
+  .scrollhide{ -ms-overflow-style:none; scrollbar-width:none; }
+  .progress-ring{ transition: stroke-dashoffset 1s ease; }
+</style>
+</head>
+<body>
+<div id="app" class="app-shell"></div>
+
+<script>
+// ---------- state ----------
+const STORAGE_KEY = "rooted_journey_state_v1";
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return {
+    streak: 25,
+    tasks: [
+      { id:1, title:"Minoxidil 5% Solution", time:"Morning", completed:true },
+      { id:2, title:"Biotin Hair Gummies", time:"Afternoon", completed:true },
+      { id:3, title:"Derma Roller Session", time:"Evening", completed:false }
+    ],
+    log: [],
+    activeTab: "dashboard",
+    photoDay1: null,
+    photoToday: null
+  };
+}
+let state = loadState();
+function saveState(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+}
+
+// ---------- icons (inline SVG, no external deps) ----------
+const icon = {
+  check: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`,
+  circle: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`,
+  camera: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></svg>`,
+  activity: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
+  activityLg: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`,
+  info: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
+  chevron: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`,
+};
+
+const timelineStages = [
+  { id:1, month:"Month 1", title:"The Activation", desc:"Follicles wake up. Minoxidil and finasteride begin working below the surface — nothing visible yet, and that's expected.", status:"past" },
+  { id:2, month:"Month 2", title:"The Shedding Phase", desc:"Don't panic. Weak, resting hairs fall out to make room for stronger ones coming in behind them. This is a sign it's working, not failing.", status:"current", shed:true },
+  { id:3, month:"Month 3", title:"Early Regrowth", desc:"Fine baby hairs begin forming along the hairline and crown. Hard to see in the mirror — easy to see in photos.", status:"future" },
+  { id:4, month:"Month 6", title:"Visible Density", desc:"Noticeable thickening and coverage. The stretch that felt like nothing was happening is what made this possible.", status:"future" },
+];
+
+// ---------- render ----------
+function render(){
+  const root = document.getElementById("app");
+  root.innerHTML = `
+    <header class="px-6 pt-7 pb-6 bg-neutral-900/40 border-b border-neutral-800">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-bold tracking-tight text-white">Man Matters</h1>
+          <p class="text-amber-500 font-semibold text-xs tracking-widest uppercase mt-1">Rooted Journey</p>
+        </div>
+        <div class="bg-amber-500/10 border border-amber-500/30 text-amber-500 px-4 py-2 rounded-full flex items-center gap-2">
+          ${icon.activity}
+          <span class="font-bold text-sm">Day ${state.streak}</span>
+        </div>
+      </div>
+    </header>
+    <main class="p-6 pb-28 min-h-[70vh]">
+      ${state.activeTab === "dashboard" ? dashboardView() : ""}
+      ${state.activeTab === "timeline" ? timelineView() : ""}
+      ${state.activeTab === "gallery" ? galleryView() : ""}
+    </main>
+    <nav class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[460px] bg-neutral-950/90 backdrop-blur-md border-t border-neutral-800 px-6 flex justify-between items-center z-50"
+      style="padding-top:14px; padding-bottom: calc(14px + env(safe-area-inset-bottom,0px));">
+      ${navBtn("dashboard", icon.check, "Routine")}
+      ${navBtn("timeline", icon.activityLg, "Journey")}
+      ${navBtn("gallery", icon.camera, "Progress")}
+    </nav>
+  `;
+  attachHandlers();
+}
+
+function navBtn(tab, iconSvg, label){
+  const active = state.activeTab === tab;
+  return `
+    <button data-tab="${tab}" class="tab-btn flex flex-col items-center gap-1 ${active ? "text-amber-500" : "text-neutral-500"}">
+      ${iconSvg}
+      <span class="text-[10px] font-bold tracking-wide uppercase">${label}</span>
+    </button>
+  `;
+}
+
+function dashboardView(){
+  const doneCount = state.tasks.filter(t=>t.completed).length;
+  return `
+  <div class="fade-in space-y-8">
+    <section>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-neutral-300">Today's Routine</h2>
+        <span class="text-xs text-neutral-500">${doneCount}/${state.tasks.length} done</span>
+      </div>
+      <div class="space-y-3">
+        ${state.tasks.map(t => `
+          <div data-task="${t.id}" class="task-row flex items-center justify-between p-4 rounded-xl border cursor-pointer ${t.completed ? "bg-amber-500/10 border-amber-500/30" : "bg-neutral-900 border-neutral-800"}">
+            <div class="flex items-center gap-4">
+              <span class="${t.completed ? "text-amber-500" : "text-neutral-600"}">${t.completed ? icon.check : icon.circle}</span>
+              <div>
+                <p class="font-medium ${t.completed ? "text-neutral-200" : "text-neutral-400"}">${t.title}</p>
+                <p class="text-xs text-neutral-500">${t.time}</p>
+              </div>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+
+    <section class="bg-gradient-to-br from-neutral-900 to-neutral-950 p-5 rounded-2xl border border-neutral-800 relative overflow-hidden">
+      <div class="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl translate-x-1/2 -translate-y-1/2"></div>
+      <h3 class="text-sm text-neutral-400 font-medium mb-1">Consistency is Key</h3>
+      <p class="text-2xl font-bold text-white mb-2">You're in the top 15%</p>
+      <p class="text-sm text-neutral-500">Most guys quit before Day 30 — usually right around the shedding phase. You've shown up for ${state.streak} days straight. Keep going.</p>
+    </section>
+
+    <section class="bg-neutral-900 border border-neutral-800 rounded-2xl p-5">
+      <div class="flex items-start gap-3">
+        <span class="text-amber-500 mt-0.5">${icon.info}</span>
+        <div>
+          <p class="text-sm font-semibold text-neutral-200 mb-1">Where you are right now</p>
+          <p class="text-sm text-neutral-400 leading-relaxed">You're in the <span class="text-amber-500 font-medium">Shedding Phase</span> (Month 2). Seeing a bit more hair fall is expected here — it's not a setback. See the Journey tab for what's happening and what's next.</p>
+        </div>
+      </div>
+    </section>
+  </div>`;
+}
+
+function timelineView(){
+  return `
+  <div class="fade-in">
+    <div class="mb-8">
+      <h2 class="text-2xl font-bold text-white mb-2">Trust the Process</h2>
+      <p class="text-neutral-400 text-sm">Hair growth happens below the surface long before you see it in the mirror. Here's what to expect, before it happens.</p>
+    </div>
+    <div class="space-y-0 relative">
+      <div class="absolute left-5 top-0 bottom-0 w-px bg-gradient-to-b from-transparent via-neutral-800 to-transparent"></div>
+      ${timelineStages.map(stage => `
+        <div class="relative flex items-start gap-4 pb-8">
+          <div class="flex items-center justify-center w-10 h-10 rounded-full border-4 shrink-0 z-10 ${
+            stage.status === "current" ? "bg-neutral-900 border-amber-500" :
+            stage.status === "past" ? "bg-amber-500 border-amber-500" : "bg-neutral-950 border-neutral-800"}">
+            ${stage.status === "past" ? `<span class="text-neutral-950">${icon.check.replace('width="24" height="24"','width="16" height="16"')}</span>` : ""}
+            ${stage.status === "current" ? `<div class="w-2.5 h-2.5 bg-amber-500 rounded-full pulse-dot"></div>` : ""}
+          </div>
+          <div class="flex-1 p-4 rounded-xl border ${stage.shed ? "bg-amber-500/5 border-amber-500/30 relative overflow-hidden" : "bg-neutral-900 border-neutral-800"}">
+            ${stage.shed ? `<div class="absolute top-0 right-0 bg-amber-500 text-neutral-950 text-[10px] font-bold px-2 py-1 rounded-bl-lg">YOU ARE HERE</div>` : ""}
+            <span class="text-xs font-bold uppercase ${stage.status === "current" ? "text-amber-500" : "text-neutral-500"}">${stage.month}</span>
+            <h3 class="text-lg font-bold text-neutral-200 mt-1 mb-1">${stage.title}</h3>
+            <p class="text-sm text-neutral-400 leading-relaxed">${stage.desc}</p>
+            ${stage.shed ? `
+              <div class="mt-3 bg-neutral-950/50 p-3 rounded-lg flex gap-3 items-start border border-neutral-800">
+                <span class="text-amber-500 shrink-0 mt-0.5">${icon.info}</span>
+                <p class="text-xs text-neutral-300">New, stronger hairs are pushing out old resting hairs. <strong>Do not stop treatment now</strong> — stopping here is the single biggest reason customers don't see results.</p>
+              </div>` : ""}
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  </div>`;
+}
+
+function galleryView(){
+  return `
+  <div class="fade-in">
+    <div class="flex justify-between items-end mb-6">
+      <div>
+        <h2 class="text-2xl font-bold text-white mb-2">Micro-Progress</h2>
+        <p class="text-neutral-400 text-sm">Compare Day 1 to today. Spot the baby hairs the mirror can't.</p>
+      </div>
+      <label class="bg-amber-500 text-neutral-950 p-3 rounded-full cursor-pointer active:bg-amber-400">
+        ${icon.camera}
+        <input id="photoInput" type="file" accept="image/*" capture="environment" class="hidden">
+      </label>
+    </div>
+
+    <div class="bg-neutral-900 p-4 rounded-2xl border border-neutral-800 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <span class="text-sm font-medium text-neutral-400">Crown Area</span>
+        <span class="text-xs bg-neutral-800 px-2 py-1 rounded text-neutral-300">${state.streak} Days Apart</span>
+      </div>
+      <div class="grid grid-cols-2 gap-3 relative">
+        <div class="absolute left-1/2 top-0 bottom-0 w-px bg-neutral-800 -translate-x-1/2 z-10 flex items-center justify-center">
+          <div class="bg-neutral-800 p-1 rounded-full border border-neutral-700">${icon.chevron}</div>
+        </div>
+        <div class="space-y-2">
+          <div class="aspect-square bg-neutral-800 rounded-xl overflow-hidden relative bg-center bg-cover" style="${state.photoDay1 ? `background-image:url(${state.photoDay1})` : ""}">
+            ${!state.photoDay1 ? `<div class="absolute inset-0 flex items-center justify-center text-neutral-600 bg-neutral-950/50 font-medium text-sm text-center px-2">Day 1 Photo</div>` : ""}
+          </div>
+          <p class="text-center text-xs text-neutral-500 font-medium">Day 1 Baseline</p>
+        </div>
+        <div class="space-y-2">
+          <div class="aspect-square bg-neutral-800 rounded-xl overflow-hidden relative border-2 border-amber-500/20 bg-center bg-cover" style="${state.photoToday ? `background-image:url(${state.photoToday})` : ""}">
+            ${!state.photoToday ? `<div class="absolute inset-0 flex items-center justify-center text-amber-500/50 bg-neutral-950/50 font-medium text-sm text-center px-2">Tap camera to add today's photo</div>` : ""}
+          </div>
+          <p class="text-center text-xs text-amber-500 font-medium">Day ${state.streak}</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-amber-500/10 border border-amber-500/30 p-4 rounded-xl">
+      <p class="text-sm text-amber-500/90 text-center">"You look at yourself every day, which makes 1% changes invisible. Trust the camera, not the mirror."</p>
+    </div>
+  </div>`;
+}
+
+function attachHandlers(){
+  document.querySelectorAll("[data-tab]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      state.activeTab = btn.getAttribute("data-tab");
+      saveState();
+      render();
+    });
+  });
+  document.querySelectorAll("[data-task]").forEach(row=>{
+    row.addEventListener("click", ()=>{
+      const id = Number(row.getAttribute("data-task"));
+      const task = state.tasks.find(t=>t.id===id);
+      if(task) task.completed = !task.completed;
+      saveState();
+      render();
+    });
+  });
+  const photoInput = document.getElementById("photoInput");
+  if(photoInput){
+    photoInput.addEventListener("change", (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        if(!state.photoDay1){ state.photoDay1 = reader.result; }
+        else { state.photoToday = reader.result; }
+        saveState();
+        render();
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+}
+
+render();
+</script>
+</body>
+</html>
